@@ -1,33 +1,45 @@
-# Usage: docker run --restart=always -v /var/data/blockchain-xmr:/root/.bitmonero -p 18080:18080 -p 18081:18081 --name=monerod -td kannix/monero-full-node
-FROM ubuntu:18.04 AS build
+FROM ubuntu:latest
 
-ENV MONERO_VERSION=0.17.2.3 MONERO_SHA256=8069012ad5e7b35f79e35e6ca71c2424efc54b61f6f93238b182981ba83f2311
+ENV DEBIAN_FRONTEND=noninteractive
 
+ARG MONERO_ARCH
+ARG MONERO_VERSION
+ARG MONERO_SHA256
 
-RUN apt-get update && apt-get install -y curl bzip2
+RUN apt-get -qq update && apt-get -qq install --yes curl bzip2
 
 WORKDIR /root
 
-RUN curl https://dlsrc.getmonero.org/cli/monero-linux-x64-v$MONERO_VERSION.tar.bz2 -O &&\
-  echo "$MONERO_SHA256  monero-linux-x64-v$MONERO_VERSION.tar.bz2" | sha256sum -c - &&\
-  tar -xvf monero-linux-x64-v$MONERO_VERSION.tar.bz2 &&\
-  rm monero-linux-x64-v$MONERO_VERSION.tar.bz2 &&\
-  cp ./monero-x86_64-linux-gnu-v$MONERO_VERSION/monerod . &&\
-  rm -r monero-*
+RUN curl -fsSL https://downloads.getmonero.org/cli/monero-linux-$MONERO_ARCH-v$MONERO_VERSION.tar.bz2 -O && \
+  echo "$MONERO_SHA256  monero-linux-$MONERO_ARCH-v$MONERO_VERSION.tar.bz2" | sha256sum -c - && \
+  tar -xf monero-linux-$MONERO_ARCH-v$MONERO_VERSION.tar.bz2 --directory /root --strip 1
 
-FROM ubuntu:18.04
+FROM ubuntu:latest
+
+ARG APPLICATION_NAME=monero-full-node
+ARG BUILD_VERSION=1.0
+ARG BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+LABEL org.label-schema.name="f4bio/monero-full-node"
+LABEL org.label-schema.description="docker image to run a monero full network node"
+LABEL org.label-schema.url="https://github.com/f4bio/monero-full-node"
+LABEL org.label-schema.application=$APPLICATION_NAME
+LABEL org.label-schema.build-date=$BUILD_DATE
+LABEL org.label-schema.version=$BUILD_VERSION
+LABEL org.opencontainers.image.source="https://github.com/f4bio/monero-full-node"
 
 RUN useradd -ms /bin/bash monero && mkdir -p /home/monero/.bitmonero && chown -R monero:monero /home/monero/.bitmonero
 USER monero
 WORKDIR /home/monero
 
-COPY --chown=monero:monero --from=build /root/monerod /home/monero/monerod
+COPY --chown=monero:monero --from=0 /root/monerod /opt/bin/
 
 # blockchain location
 VOLUME /home/monero/.bitmonero
 
 EXPOSE 18080 18081
 
-
-ENTRYPOINT ["./monerod"]
+ENTRYPOINT ["/opt/bin/monerod"]
 CMD ["--non-interactive", "--restricted-rpc", "--rpc-bind-ip=0.0.0.0", "--confirm-external-bind", "--enable-dns-blocklist", "--out-peers=16"]
